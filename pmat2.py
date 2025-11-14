@@ -15,7 +15,7 @@ MODEL_PATH = "rf_model4.pkl"
 DATASET_PATH = "pipeline_dataset4.csv"
 PRODUCT_ENCODER_PATH = "le_product.pkl"
 SERVICE_ENCODER_PATH = "le_service.pkl"
-LOGO_PATH = "pmat_logo.png" # Make sure your logo is named this and is in the same folder
+LOGO_PATH = "pmat_logo.png" 
 
 # --- Material Colors for consistent charting ---
 MATERIAL_COLORS = {
@@ -57,6 +57,20 @@ st.markdown("""
 /* Headings and Spacing */
 h1,h2,h3 {color:#1e3a8a;}
 .stMarkdown h3 {margin-top: 2rem;}
+
+/* Style the radio buttons horizontally for better mobile fit */
+div.stRadio > label {
+    padding: 0 0.5rem; /* Reduced padding */
+    margin-right: 0.5rem; /* Space between buttons */
+}
+div.stRadio > label:nth-child(even) {
+    background-color: #f0f2f6; /* Subtle background for readability */
+    border-radius: 5px;
+}
+/* Ensure the radio button container uses all width */
+div.stRadio {
+    width: 100%;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -115,6 +129,8 @@ if 'prediction_history' not in st.session_state:
     st.session_state.prediction_history = []
 if 'current_inputs' not in st.session_state:
     st.session_state.current_inputs = {'size': 20, 'length': 48.4, 'product': 'Gas', 'service': 'Sweet', 'pressure': 168.4, 'temperature': 28.2}
+if 'page_selection' not in st.session_state:
+    st.session_state.page_selection = "1. AI Analysis: Input & Results"
 
 # --- HELPER FUNCTIONS ---
 def make_prediction(model, le_product, le_service, inputs):
@@ -226,7 +242,7 @@ else:
     """, unsafe_allow_html=True)
 
 
-# --- SIDEBAR NAVIGATION (Updated) ---
+# --- SIDEBAR NAVIGATION ---
 PAGES = {
     "1. AI Analysis: Input & Results": "ai_analysis",
     "2. Engineering Decision Matrix": "decision_matrix",
@@ -237,16 +253,19 @@ PAGES = {
 with st.sidebar:
     st.header("Dashboard Navigation")
     
-    if 'page_selection' not in st.session_state:
-        st.session_state.page_selection = list(PAGES.keys())[0]
-
-    page_selection = st.selectbox(
+    # Sidebar navigation (Primary for Desktop)
+    page_selection_sidebar = st.selectbox(
         "Select Analysis Step:", 
         options=list(PAGES.keys()), 
         index=list(PAGES.keys()).index(st.session_state.page_selection),
-        key='page_selection'
+        key='page_selection_sidebar'
     )
     
+    # Update main session state if sidebar changes
+    if st.session_state.page_selection != page_selection_sidebar:
+        st.session_state.page_selection = page_selection_sidebar
+        st.rerun()
+
     st.markdown("---")
     st.header("Model Context")
     if rf_model:
@@ -257,6 +276,26 @@ with st.sidebar:
         st.error("Model: Not Loaded")
     
     st.markdown("---")
+
+
+# --- MOBILE/TABLET NAVIGATION (Top Menu Workaround) ---
+# Use st.radio for a more compact, horizontal navigation feel, especially on mobile.
+page_selection_main = st.radio(
+    "Select Step:", 
+    options=list(PAGES.keys()), 
+    index=list(PAGES.keys()).index(st.session_state.page_selection),
+    key='page_selection_main',
+    horizontal=True
+)
+
+# Use the selection from the main body for display logic if it changes
+if st.session_state.page_selection != page_selection_main:
+    st.session_state.page_selection = page_selection_main
+    st.rerun()
+
+# Use the value stored in session_state for all logic blocks
+page_selection = st.session_state.page_selection
+
 
 # --- CHECK IF MODEL IS LOADED ---
 if rf_model is None or le_product is None or le_service is None:
