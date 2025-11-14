@@ -131,10 +131,10 @@ if 'prediction_history' not in st.session_state:
     st.session_state.prediction_history = []
 if 'current_inputs' not in st.session_state:
     st.session_state.current_inputs = {'size': 20, 'length': 48.4, 'product': 'Gas', 'service': 'Sweet', 'pressure': 168.4, 'temperature': 28.2}
-if 'selected_page' not in st.session_state: # Renamed for clarity and consistency
+if 'selected_page' not in st.session_state: 
     st.session_state.selected_page = "1. AI Analysis: Input & Results"
 
-# --- HELPER FUNCTIONS (No change to logic) ---
+# --- HELPER FUNCTIONS ---
 def make_prediction(model, le_product, le_service, inputs):
     try:
         product_encoded = le_product.transform([inputs['product']])[0]
@@ -253,17 +253,26 @@ PAGES = {
 }
 PAGE_KEYS = list(PAGES.keys())
 
-
+# --- HELPER FUNCTION TO UPDATE STATE ---
+def update_page_state():
+    # If the user clicks a button in the main body (radio), it updates 'main_page_select'
+    if 'main_page_select' in st.session_state:
+        st.session_state.selected_page = st.session_state.main_page_select
+    # If the user uses the sidebar (selectbox), it updates 'sidebar_page_select'
+    if 'sidebar_page_select' in st.session_state:
+        st.session_state.selected_page = st.session_state.sidebar_page_select
+        
 # --- SIDEBAR NAVIGATION (Primary for Desktop) ---
 with st.sidebar:
     st.header("Dashboard Navigation")
     
-    # Sidebar navigation (Bound to the shared state key)
+    # Sidebar navigation: Uses a UNIQUE KEY. The onChange callback ensures the main state is updated.
     st.selectbox(
         "Select Analysis Step:", 
         options=PAGE_KEYS, 
         index=PAGE_KEYS.index(st.session_state.selected_page),
-        key='selected_page' # Shared key
+        key='sidebar_page_select', # UNIQUE KEY
+        on_change=update_page_state # Callback to synchronize state
     )
     
     st.markdown("---")
@@ -279,16 +288,17 @@ with st.sidebar:
 
 
 # --- MAIN BODY NAVIGATION (Mobile/Tablet Workaround) ---
-# This serves as the top menu for smaller screens. It also uses the shared state key.
+# This is the top menu for smaller screens. It also uses a UNIQUE KEY.
 st.radio(
     "Select Step:", 
     options=PAGE_KEYS, 
     index=PAGE_KEYS.index(st.session_state.selected_page),
-    key='selected_page', # Shared key
-    horizontal=True
+    key='main_page_select', # UNIQUE KEY
+    horizontal=True,
+    on_change=update_page_state # Callback to synchronize state
 )
 
-# Use the value stored in session_state for all logic blocks
+# The logic below uses the synchronized state variable
 page_selection = st.session_state.selected_page
 
 
@@ -470,9 +480,9 @@ if page_selection == "2. Engineering Decision Matrix":
 
             col_w1, col_w2, col_w3 = st.columns(3)
 
-            weight_cost = col_w1.slider("Relative Cost/CAPEX Importance", 0, 5, 4, help="How much cost (CAPEX/OPEX) should influence the final decision (5=High).")
-            weight_risk = col_w2.slider("Failure/Safety Consequence Importance", 0, 5, 3, help="How much risk/safety consequence should influence the final decision (5=High).")
-            weight_availability = col_w3.slider("Lead Time/Availability Importance", 0, 5, 2, help="How much material availability and procurement time should influence the final decision (5=High).")
+            weight_cost = col_w1.slider("Relative Cost/CAPEX Importance", 0, 5, 4, key='cost_weight', help="How much cost (CAPEX/OPEX) should influence the final decision (5=High).")
+            weight_risk = col_w2.slider("Failure/Safety Consequence Importance", 0, 5, 3, key='risk_weight', help="How much risk/safety consequence should influence the final decision (5=High).")
+            weight_availability = col_w3.slider("Lead Time/Availability Importance", 0, 5, 2, key='avail_weight', help="How much material availability and procurement time should influence the final decision (5=High).")
 
             weights = {
                 'Cost Score': weight_cost,
@@ -499,10 +509,10 @@ if page_selection == "2. Engineering Decision Matrix":
             with score_cols[i]:
                 st.markdown(f"**{mat}** ({row['AI Probability']*100:.1f}%)")
                 
-                # Sliders with clearer labels/help text
-                cost_s = st.slider(f"Cost Score (1-5)", 1, 5, key=f"cost_{mat}", value=3, help="5=Low Cost, 1=High Cost")
-                risk_s = st.slider(f"Risk Score (1-5)", 1, 5, key=f"risk_{mat}", value=4, help="5=Low Risk, 1=High Risk")
-                avail_s = st.slider(f"Availability Score (1-5)", 1, 5, key=f"avail_{mat}", value=5, help="5=Fast Lead Time, 1=Slow Lead Time")
+                # Sliders with unique keys generated dynamically
+                cost_s = st.slider(f"Cost Score (1-5)", 1, 5, key=f"cost_score_{mat}", value=3, help="5=Low Cost, 1=High Cost")
+                risk_s = st.slider(f"Risk Score (1-5)", 1, 5, key=f"risk_score_{mat}", value=4, help="5=Low Risk, 1=High Risk")
+                avail_s = st.slider(f"Availability Score (1-5)", 1, 5, key=f"avail_score_{mat}", value=5, help="5=Fast Lead Time, 1=Slow Lead Time")
                 
                 manual_scores[mat] = {
                     'Cost Score': cost_s,
@@ -622,7 +632,7 @@ if page_selection == "4. Prediction History":
         st.dataframe(history_df, use_container_width=True, hide_index=True)
         
         st.markdown("---")
-        if st.button("Clear All History", use_container_width=True):
+        if st.button("Clear All History", key='clear_history', use_container_width=True):
             st.session_state.prediction_history = []
             st.session_state.prediction_made = False
             st.rerun()
@@ -634,4 +644,3 @@ st.markdown("""
 <p>PMAT v1.0 | UTP & PETRONAS Carigali | &copy; 2025</p>
 </div>
 """, unsafe_allow_html=True)
-
