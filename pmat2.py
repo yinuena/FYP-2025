@@ -58,18 +58,20 @@ st.markdown("""
 h1,h2,h3 {color:#1e3a8a;}
 .stMarkdown h3 {margin-top: 2rem;}
 
-/* Style the radio buttons horizontally for better mobile fit */
+/* Style the radio buttons for a horizontal 'top menu' feel, especially on mobile */
 div.stRadio > label {
     padding: 0 0.5rem; /* Reduced padding */
     margin-right: 0.5rem; /* Space between buttons */
-}
-div.stRadio > label:nth-child(even) {
-    background-color: #f0f2f6; /* Subtle background for readability */
     border-radius: 5px;
+    white-space: normal; /* Allow text wrapping */
 }
-/* Ensure the radio button container uses all width */
 div.stRadio {
     width: 100%;
+}
+/* Reduce vertical spacing around radio buttons */
+.stRadio > div {
+    padding-top: 0;
+    padding-bottom: 0;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -129,10 +131,10 @@ if 'prediction_history' not in st.session_state:
     st.session_state.prediction_history = []
 if 'current_inputs' not in st.session_state:
     st.session_state.current_inputs = {'size': 20, 'length': 48.4, 'product': 'Gas', 'service': 'Sweet', 'pressure': 168.4, 'temperature': 28.2}
-if 'page_selection' not in st.session_state:
-    st.session_state.page_selection = "1. AI Analysis: Input & Results"
+if 'selected_page' not in st.session_state: # Renamed for clarity and consistency
+    st.session_state.selected_page = "1. AI Analysis: Input & Results"
 
-# --- HELPER FUNCTIONS ---
+# --- HELPER FUNCTIONS (No change to logic) ---
 def make_prediction(model, le_product, le_service, inputs):
     try:
         product_encoded = le_product.transform([inputs['product']])[0]
@@ -242,30 +244,28 @@ else:
     """, unsafe_allow_html=True)
 
 
-# --- SIDEBAR NAVIGATION ---
+# --- NAVIGATION DEFINITION ---
 PAGES = {
     "1. AI Analysis: Input & Results": "ai_analysis",
     "2. Engineering Decision Matrix": "decision_matrix",
     "3. Global XAI & Historical Data": "global_xai",
     "4. Prediction History": "history", 
 }
+PAGE_KEYS = list(PAGES.keys())
 
+
+# --- SIDEBAR NAVIGATION (Primary for Desktop) ---
 with st.sidebar:
     st.header("Dashboard Navigation")
     
-    # Sidebar navigation (Primary for Desktop)
-    page_selection_sidebar = st.selectbox(
+    # Sidebar navigation (Bound to the shared state key)
+    st.selectbox(
         "Select Analysis Step:", 
-        options=list(PAGES.keys()), 
-        index=list(PAGES.keys()).index(st.session_state.page_selection),
-        key='page_selection_sidebar'
+        options=PAGE_KEYS, 
+        index=PAGE_KEYS.index(st.session_state.selected_page),
+        key='selected_page' # Shared key
     )
     
-    # Update main session state if sidebar changes
-    if st.session_state.page_selection != page_selection_sidebar:
-        st.session_state.page_selection = page_selection_sidebar
-        st.rerun()
-
     st.markdown("---")
     st.header("Model Context")
     if rf_model:
@@ -278,23 +278,18 @@ with st.sidebar:
     st.markdown("---")
 
 
-# --- MOBILE/TABLET NAVIGATION (Top Menu Workaround) ---
-# Use st.radio for a more compact, horizontal navigation feel, especially on mobile.
-page_selection_main = st.radio(
+# --- MAIN BODY NAVIGATION (Mobile/Tablet Workaround) ---
+# This serves as the top menu for smaller screens. It also uses the shared state key.
+st.radio(
     "Select Step:", 
-    options=list(PAGES.keys()), 
-    index=list(PAGES.keys()).index(st.session_state.page_selection),
-    key='page_selection_main',
+    options=PAGE_KEYS, 
+    index=PAGE_KEYS.index(st.session_state.selected_page),
+    key='selected_page', # Shared key
     horizontal=True
 )
 
-# Use the selection from the main body for display logic if it changes
-if st.session_state.page_selection != page_selection_main:
-    st.session_state.page_selection = page_selection_main
-    st.rerun()
-
 # Use the value stored in session_state for all logic blocks
-page_selection = st.session_state.page_selection
+page_selection = st.session_state.selected_page
 
 
 # --- CHECK IF MODEL IS LOADED ---
@@ -639,3 +634,4 @@ st.markdown("""
 <p>PMAT v1.0 | UTP & PETRONAS Carigali | &copy; 2025</p>
 </div>
 """, unsafe_allow_html=True)
+
