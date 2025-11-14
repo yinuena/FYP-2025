@@ -41,15 +41,9 @@ st.markdown("""
 /* Button Styling */
 .stButton>button { width: 100%; background: linear-gradient(90deg,#3b82f6 0%,#2563eb 100%); color: white; font-weight:bold; padding:0.75rem; border-radius:8px; border:none; font-size:1.1rem; transition: all 0.3s ease;}
 .stButton>button:hover { background: linear-gradient(90deg,#2563eb 0%,#1d4ed8 100%); box-shadow:0 4px 8px rgba(37,99,235,0.3); transform: translateY(-2px);}
-/* Info Boxes */
-.info-box {background-color: #eff6ff; border-left: 4px solid #3b82f6; padding:1rem; border-radius:4px; margin:1rem 0;}
-.warning-box {background-color:#fef3c7; border-left:4px solid #f59e0b; padding:1rem; border-radius:4px; margin:1rem 0;}
-.success-box {background-color:#d1fae5; border-left:4px solid #10b981; padding:1rem; border-radius:4px; margin:1rem 0;}
 /* Headings and Spacing */
 h1,h2,h3 {color:#1e3a8a;}
-.stMarkdown h3 {margin-top: 2rem;} 
-/* Anchor styling for smooth scrolling (optional, may not work in all Streamlit hosting environments) */
-.anchor {padding-top: 50px; margin-top: -50px;} 
+.stMarkdown h3 {margin-top: 2rem;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -111,7 +105,7 @@ if 'current_inputs' not in st.session_state:
 
 # --- HELPER FUNCTIONS ---
 def make_prediction(model, le_product, le_service, inputs):
-    # Prediction logic (simplified for brevity, assumes successful loading)
+    # Prediction logic (as before)
     try:
         product_encoded = le_product.transform([inputs['product']])[0]
         service_encoded = le_service.transform([inputs['service']])[0]
@@ -152,12 +146,9 @@ def make_prediction(model, le_product, le_service, inputs):
         'probabilities': probabilities_dict
     }
 
-# Function to get rejection reasoning (kept simple, as it was already provided)
 def get_rejection_reasoning(material_type, inputs):
+    # Rejection reasoning logic (as before)
     reasons = []
-    # ... (Rejection logic as before) ...
-    # This function is not modified from the previous step as it was not requested to change.
-    
     P_HIGH = 110 # barg
     T_HIGH = 85  # degC
     SIZE_LARGE = 24 # inch
@@ -184,7 +175,6 @@ def get_rejection_reasoning(material_type, inputs):
         if size > SIZE_LARGE: reasons.append(f"Pipeline Size ({size} inch) is large, making installation and procurement of high-diameter **Flexible** pipe complex.")
     
     if not reasons and st.session_state.prediction_made:
-        # Use the most recent prediction's confidence for context
         confidence = st.session_state.prediction_result['confidence']
         reasons.append(f"The AI's confidence ({confidence*100:.1f}%) in the primary recommendation was significantly higher, suggesting a more optimal fit based on the historical feature patterns.")
         
@@ -210,14 +200,13 @@ PAGES = {
 with st.sidebar:
     st.header("Dashboard Navigation")
     
-    # Use st.selectbox to allow navigation (links to section headers below)
+    # Use st.selectbox to control content display
     page_selection = st.selectbox(
-        "Jump to Section:", 
+        "Select Analysis Step:", 
         options=list(PAGES.keys()), 
-        format_func=lambda x: x.split(". ")[1]
+        format_func=lambda x: x.split(". ")[1] # Display only the title, not the number
     )
     
-    # Model Context
     st.markdown("---")
     st.header("🎯 Model Context")
     if rf_model:
@@ -242,81 +231,87 @@ if rf_model is None or le_product is None or le_service is None:
     st.stop()
 
 
-# --- 1. USER INPUT FORM (Back in Main Page) ---
-st.markdown('<div class="anchor" id="input"></div>', unsafe_allow_html=True)
-st.header("1. Pipeline Parameters Input")
-st.markdown("Define the technical specifications for the AI analysis.")
+# --- SECTION 1: USER INPUT FORM ---
+if page_selection == "1. Pipeline Parameters":
+    st.header("1. Pipeline Parameters Input")
+    st.markdown("Define the technical specifications for the AI analysis.")
 
-with st.form("pipeline_inputs"):
-    col1, col2 = st.columns(2)
+    with st.form("pipeline_inputs"):
+        col1, col2 = st.columns(2)
 
-    product_options = df['Product'].unique().tolist() if df is not None and 'Product' in df.columns else ['Gas', 'Oil', 'Condensate', 'Water']
-    service_options = df['Service'].unique().tolist() if df is not None and 'Service' in df.columns else ['Sweet', 'Sour']
+        product_options = df['Product'].unique().tolist() if df is not None and 'Product' in df.columns else ['Gas', 'Oil', 'Condensate', 'Water']
+        service_options = df['Service'].unique().tolist() if df is not None and 'Service' in df.columns else ['Sweet', 'Sour']
 
-    with col1:
-        st.subheader("Physical Parameters")
-        pipeline_size = st.number_input("Pipeline Size (inch)", 2, 36, 20, 2)
-        length = st.number_input("Length (km)", 1.0, 75.0, 48.4, 0.1)
-        product = st.selectbox("Product Type", options=product_options)
+        with col1:
+            st.subheader("Physical Parameters")
+            # Use session state to maintain values if user switches pages
+            pipeline_size = st.number_input("Pipeline Size (inch)", 2, 36, st.session_state.current_inputs.get('size', 20), 2)
+            length = st.number_input("Length (km)", 1.0, 75.0, st.session_state.current_inputs.get('length', 48.4), 0.1)
+            product = st.selectbox("Product Type", options=product_options, index=product_options.index(st.session_state.current_inputs.get('product', 'Gas')))
 
-    with col2:
-        st.subheader("Operating Conditions")
-        service = st.selectbox("Service Type", options=service_options)
-        pressure = st.number_input("Design Pressure (barg)", 20.0, 180.0, 168.4, 0.1)
-        temperature = st.number_input("Design Temperature (°C)", 25.0, 130.0, 28.2, 0.1)
+        with col2:
+            st.subheader("Operating Conditions")
+            service = st.selectbox("Service Type", options=service_options, index=service_options.index(st.session_state.current_inputs.get('service', 'Sweet')))
+            pressure = st.number_input("Design Pressure (barg)", 20.0, 180.0, st.session_state.current_inputs.get('pressure', 168.4), 0.1)
+            temperature = st.number_input("Design Temperature (°C)", 25.0, 130.0, st.session_state.current_inputs.get('temperature', 28.2), 0.1)
 
-    submitted = st.form_submit_button("Generate AI Recommendation and Decision Matrix", use_container_width=True)
+        submitted = st.form_submit_button("Generate AI Recommendation and Decision Matrix", use_container_width=True)
 
-    st.session_state.current_inputs = {
-        'size': pipeline_size, 
-        'length': length, 
-        'product': product, 
-        'service': service,
-        'pressure': pressure, 
-        'temperature': temperature
-    }
+        st.session_state.current_inputs = {
+            'size': pipeline_size, 
+            'length': length, 
+            'product': product, 
+            'service': service,
+            'pressure': pressure, 
+            'temperature': temperature
+        }
 
-# --- HANDLE SUBMISSION ---
-if submitted:
-    with st.spinner(" Generating recommendation..."):
-        time.sleep(0.5)
-        result = make_prediction(rf_model, le_product, le_service, st.session_state.current_inputs)
+    # --- HANDLE SUBMISSION ---
+    if submitted:
+        with st.spinner("Generating recommendation..."):
+            time.sleep(0.5)
+            result = make_prediction(rf_model, le_product, le_service, st.session_state.current_inputs)
+            
+            if result:
+                st.session_state.prediction_result = result
+                st.session_state.prediction_made = True
+                st.session_state.prediction_history.append({
+                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'inputs': st.session_state.current_inputs,
+                    'result': result['material'],
+                    'confidence': result['confidence']
+                })
+                # Auto-switch to results page after submission
+                st.session_state['page_selection'] = "2. AI Recommendation & XAI"
+                st.success("✅ Prediction successful! Navigate to 'AI Recommendation & XAI' to view results.")
+                
+                # To trigger the sidebar selectbox change immediately (optional, may not work perfectly without st.rerun)
+                # st.rerun() 
+
+
+# --- SECTION 2: AI RESULTS & XAI ---
+if page_selection == "2. AI Recommendation & XAI":
+    if not st.session_state.prediction_made:
+        st.warning("⚠️ Please input parameters and generate a prediction in the **'1. Pipeline Parameters'** section first.")
+    else:
+        result = st.session_state.prediction_result
+        inputs = st.session_state.current_inputs
+        st.header("2. AI Recommendation & Explainable AI (XAI)")
+        st.success("✅ Analysis Loaded. Review the AI's technical recommendation and confidence score.")
+
+        # Recommendation card
+        color = MATERIAL_COLORS.get(result['material'], '#94a3b8')
         
-        if result:
-            st.session_state.prediction_result = result
-            st.session_state.prediction_made = True
-            st.session_state.prediction_history.append({
-                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'inputs': st.session_state.current_inputs,
-                'result': result['material'],
-                'confidence': result['confidence']
-            })
-            # Scroll to results after submission (simulated by re-running and checking 'prediction_made')
-            st.rerun() 
+        st.markdown(f"""
+        <div style="background-color:{color}33; padding:2rem; border-radius:12px; border-left: 6px solid {color};">
+        <h2 style="margin:0; color:{color};">Recommended Material: {result['material']}</h2>
+        <p style="font-size:1.2rem; margin:0.5rem 0 0 0;">Confidence (AI Score): <strong>{result['confidence']*100:.1f}%</strong></p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("---")
 
-# --- 2. DISPLAY RESULTS (Main Area) ---
-if st.session_state.prediction_made and st.session_state.prediction_result:
-    result = st.session_state.prediction_result
-    inputs = st.session_state.current_inputs
-    st.markdown("---")
-    st.markdown('<div class="anchor" id="ai_results"></div>', unsafe_allow_html=True)
-    st.header("2. AI Recommendation & Explainable AI (XAI)")
-    st.success("✅ Analysis Complete! Review the AI's technical recommendation and confidence score.")
-
-    # Recommendation card
-    color = MATERIAL_COLORS.get(result['material'], '#94a3b8')
-    
-    st.markdown(f"""
-    <div style="background-color:{color}33; padding:2rem; border-radius:12px; border-left: 6px solid {color};">
-    <h2 style="margin:0; color:{color};">Recommended Material: {result['material']}</h2>
-    <p style="font-size:1.2rem; margin:0.5rem 0 0 0;">Confidence (AI Score): <strong>{result['confidence']*100:.1f}%</strong></p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    col_xai_1, col_xai_2 = st.columns(2)
-
-    with col_xai_1:
-        # Probability distribution chart (with alternatives percentage)
+        # --- Probability Distribution (Sequential Visual) ---
         st.subheader("Material Probability Distribution")
         prob_df = pd.DataFrame([
             {'Material': k, 'Probability': v*100} 
@@ -330,27 +325,12 @@ if st.session_state.prediction_made and st.session_state.prediction_result:
         fig_prob.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
         fig_prob.update_layout(showlegend=False, yaxis_title="Probability (%)", xaxis_title="Material Type", height=400)
         st.plotly_chart(fig_prob, use_container_width=True)
-        
-        # Local XAI: Rejection Analysis
-        st.markdown("### Rejection Analysis (Local XAI)")
-        st.info("Why the alternatives scored lower, based on engineering constraints and input parameters.")
-        
-        alt_data = []
-        for alt in result['alternatives']:
-            alt_data.append({
-                'Material': alt['material'],
-                'AI Score': f"{alt['score']*100:.1f}%",
-                'Reasoning': get_rejection_reasoning(alt['material'], inputs) 
-            })
-            
-        alt_df = pd.DataFrame(alt_data)
-        st.markdown(alt_df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
+        st.markdown("---")
 
-    with col_xai_2:
-        # Feature importance (Local XAI)
+        # --- Feature Importance (Sequential Visual) ---
         if result['feature_importance']:
-            st.subheader("Feature Importance Analysis")
+            st.subheader("Feature Importance Analysis (Local XAI)")
             st.markdown("Shows which input factors drove the model's decision for this specific case.")
             fi_df = pd.DataFrame(result['feature_importance'], columns=['Feature', 'Importance'])
             
@@ -361,8 +341,10 @@ if st.session_state.prediction_made and st.session_state.prediction_result:
                 yaxis=dict(autorange="reversed"), showlegend=False, height=400, xaxis_title="Relative Importance Score"
             )
             st.plotly_chart(fig_fi, use_container_width=True)
-            
-        # Visual Validation: Your Design Point
+        
+        st.markdown("---")
+
+        # --- Visual Validation (Sequential Visual) ---
         st.subheader("Visual Validation: Your Design Point on the Historical Envelope")
         
         fig_pinpoint = px.scatter(
@@ -379,146 +361,174 @@ if st.session_state.prediction_made and st.session_state.prediction_result:
             )
         )
 
-        fig_pinpoint.update_layout(height=450, legend_title='Material Type', xaxis_title='Design Temperature ($^{\circ}$C)', yaxis_title='Design Pressure (barg)')
+        fig_pinpoint.update_layout(height=500, legend_title='Material Type', xaxis_title='Design Temperature ($^{\circ}$C)', yaxis_title='Design Pressure (barg)')
         st.plotly_chart(fig_pinpoint, use_container_width=True)
-    
-    st.markdown("---")
-    
-    # --- 3. DECISION MATRIX (New Feature) ---
-    st.markdown('<div class="anchor" id="decision_matrix"></div>', unsafe_allow_html=True)
-    st.header("3. Engineering Decision Support Matrix")
-    st.markdown("Use your expert judgment to weigh the AI's prediction against non-technical factors to determine the best material.")
-    
-    # --- Compile material list for matrix ---
-    matrix_materials = [{'Material': result['material'], 'AI Probability': result['confidence'], 'Type': 'Primary AI Pick'}]
-    for alt in result['alternatives']:
-        matrix_materials.append({'Material': alt['material'], 'AI Probability': alt['score'], 'Type': 'Alternative'})
-    df_matrix = pd.DataFrame(matrix_materials)
-    
-    with st.container(border=True):
+
+        st.markdown("---")
+
+        # Local XAI: Rejection Analysis (kept as a table/list)
+        st.subheader("Rejection Analysis (Local XAI)")
+        st.info("Why the alternatives scored lower, based on engineering constraints and input parameters.")
         
-        # --- User Weights (Clearer Labels) ---
-        st.subheader("User Weights: Importance of Non-AI Factors")
-        st.markdown("**Slider Meaning:** 0 = No Importance, 5 = Highest Importance in Final Decision.")
-
-        col_w1, col_w2, col_w3 = st.columns(3)
-
-        weight_cost = col_w1.slider("Relative Cost/CAPEX Importance", 0, 5, 4, help="How much cost should influence the final decision (5=High).")
-        weight_risk = col_w2.slider("Failure/Safety Consequence Importance", 0, 5, 3, help="How much risk/safety consequence should influence the final decision (5=High).")
-        weight_availability = col_w3.slider("Lead Time/Availability Importance", 0, 5, 2, help="How much material availability should influence the final decision (5=High).")
-
-        weights = {
-            'Cost Score': weight_cost,
-            'Risk Score': weight_risk,
-            'Availability Score': weight_availability
-        }
-    
-    # --- Scoring Table (Clearer Labels) ---
-    st.subheader("Scoring Table: Manual Engineering Score")
-    st.markdown("**Scoring Guide:**")
-    st.markdown("- **Cost Score:** 5 = Low Cost, 1 = High Cost")
-    st.markdown("- **Risk Score:** 5 = Low Risk, 1 = High Risk")
-    st.markdown("- **Availability Score:** 5 = Fast Lead Time, 1 = Slow Lead Time")
-
-    score_cols = st.columns(len(df_matrix))
-    manual_scores = {}
-
-    for i, row in df_matrix.iterrows():
-        mat = row['Material']
-        with score_cols[i]:
-            st.markdown(f"**{mat}** ({row['AI Probability']*100:.1f}%)")
+        alt_data = []
+        for alt in result['alternatives']:
+            alt_data.append({
+                'Material': alt['material'],
+                'AI Score': f"{alt['score']*100:.1f}%",
+                'Reasoning': get_rejection_reasoning(alt['material'], inputs) 
+            })
             
-            cost_s = st.slider(f"Cost Score (1-5)", 1, 5, key=f"cost_{mat}", value=3, help="5=Low Cost, 1=High Cost")
-            risk_s = st.slider(f"Risk Score (1-5)", 1, 5, key=f"risk_{mat}", value=4, help="5=Low Risk, 1=High Risk")
-            avail_s = st.slider(f"Availability Score (1-5)", 1, 5, key=f"avail_{mat}", value=5, help="5=Fast Lead Time, 1=Slow Lead Time")
+        alt_df = pd.DataFrame(alt_data)
+        st.markdown(alt_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+        
+        st.markdown("---")
+
+
+# --- SECTION 3: DECISION MATRIX ---
+if page_selection == "3. Engineering Decision Matrix":
+    if not st.session_state.prediction_made:
+        st.warning("⚠️ Please input parameters and generate a prediction in the **'1. Pipeline Parameters'** section first.")
+    else:
+        result = st.session_state.prediction_result
+        st.header("3. Engineering Decision Support Matrix")
+        st.markdown("Use your expert judgment to weigh the AI's prediction against non-technical factors to determine the best material.")
+        
+        # --- Compile material list for matrix ---
+        matrix_materials = [{'Material': result['material'], 'AI Probability': result['confidence'], 'Type': 'Primary AI Pick'}]
+        for alt in result['alternatives']:
+            matrix_materials.append({'Material': alt['material'], 'AI Probability': alt['score'], 'Type': 'Alternative'})
+        df_matrix = pd.DataFrame(matrix_materials)
+        
+        with st.container(border=True):
             
-            manual_scores[mat] = {
-                'Cost Score': cost_s,
-                'Risk Score': risk_s,
-                'Availability Score': avail_s
+            # --- User Weights (Clearer Labels) ---
+            st.subheader("User Weights: Importance of Non-AI Factors")
+            st.markdown("**Slider Meaning:** 0 = No Importance, 5 = Highest Importance in Final Decision.")
+
+            col_w1, col_w2, col_w3 = st.columns(3)
+
+            weight_cost = col_w1.slider("Relative Cost/CAPEX Importance", 0, 5, 4, help="How much cost should influence the final decision (5=High).")
+            weight_risk = col_w2.slider("Failure/Safety Consequence Importance", 0, 5, 3, help="How much risk/safety consequence should influence the final decision (5=High).")
+            weight_availability = col_w3.slider("Lead Time/Availability Importance", 0, 5, 2, help="How much material availability should influence the final decision (5=High).")
+
+            weights = {
+                'Cost Score': weight_cost,
+                'Risk Score': weight_risk,
+                'Availability Score': weight_availability
             }
-
-    # --- Final Score Calculation ---
-    st.subheader("Final Score: Combined AI and Engineering Judgment")
-    
-    st.markdown(r"""
-    The **Final Score** is calculated as the sum of AI probability and the weighted user scores:
-    $$\text{Final Score} = (\text{AI Probability}) + \sum (\text{User Score} \times \text{User Weight})$$
-    The highest Final Score indicates the recommended material based on **both** data and expert input.
-    """)
-    
-    final_scores_list = []
-    
-    for i, row in df_matrix.iterrows():
-        mat = row['Material']
-        scores = manual_scores[mat]
         
-        # Calculate weighted manual score: Sum (User Score * User Weight)
-        weighted_manual_sum = (
-            scores['Cost Score'] * weights['Cost Score'] +
-            scores['Risk Score'] * weights['Risk Score'] +
-            scores['Availability Score'] * weights['Availability Score']
+        # --- Scoring Table (Clearer Labels) ---
+        st.subheader("Scoring Table: Manual Engineering Score")
+        st.markdown("**Scoring Guide:**")
+        st.markdown("- **Cost Score:** 5 = Low Cost, 1 = High Cost")
+        st.markdown("- **Risk Score:** 5 = Low Risk, 1 = High Risk")
+        st.markdown("- **Availability Score:** 5 = Fast Lead Time, 1 = Slow Lead Time")
+
+        score_cols = st.columns(len(df_matrix))
+        manual_scores = {}
+
+        for i, row in df_matrix.iterrows():
+            mat = row['Material']
+            with score_cols[i]:
+                st.markdown(f"**{mat}** ({row['AI Probability']*100:.1f}%)")
+                
+                # Sliders with clearer labels/help text
+                cost_s = st.slider(f"Cost Score (1-5)", 1, 5, key=f"cost_{mat}", value=3, help="5=Low Cost, 1=High Cost")
+                risk_s = st.slider(f"Risk Score (1-5)", 1, 5, key=f"risk_{mat}", value=4, help="5=Low Risk, 1=High Risk")
+                avail_s = st.slider(f"Availability Score (1-5)", 1, 5, key=f"avail_{mat}", value=5, help="5=Fast Lead Time, 1=Slow Lead Time")
+                
+                manual_scores[mat] = {
+                    'Cost Score': cost_s,
+                    'Risk Score': risk_s,
+                    'Availability Score': avail_s
+                }
+
+        # --- Final Score Calculation ---
+        st.subheader("Final Score: Combined AI and Engineering Judgment")
+        
+        st.markdown(r"""
+        The **Final Score** is calculated as the sum of AI probability and the weighted user scores:
+        $$\text{Final Score} = (\text{AI Probability}) + \sum (\text{User Score} \times \text{User Weight})$$
+        The highest Final Score indicates the recommended material based on **both** data and expert input.
+        """)
+        
+        final_scores_list = []
+        
+        for i, row in df_matrix.iterrows():
+            mat = row['Material']
+            scores = manual_scores[mat]
+            
+            # Calculate weighted manual score: Sum (User Score * User Weight)
+            weighted_manual_sum = (
+                scores['Cost Score'] * weights['Cost Score'] +
+                scores['Risk Score'] * weights['Risk Score'] +
+                scores['Availability Score'] * weights['Availability Score']
+            )
+            
+            # Calculate Final Score: AI Probability + Weighted Manual Sum
+            final_score = row['AI Probability'] + weighted_manual_sum
+            
+            final_scores_list.append({
+                'Material': mat,
+                'AI Probability': f"{row['AI Probability']*100:.1f}%",
+                'Weighted Manual Score': f"{weighted_manual_sum:.1f}",
+                'Final Weighted Score': final_score,
+            })
+
+        df_final = pd.DataFrame(final_scores_list)
+        df_final = df_final.sort_values(by='Final Weighted Score', ascending=False).reset_index(drop=True)
+        
+        top_material = df_final.iloc[0]['Material']
+        
+        st.markdown("### Decision Table")
+        st.dataframe(
+            df_final.style.bar(
+                subset=['Final Weighted Score'], 
+                color=MATERIAL_COLORS['Flexible']
+            ).format({'Final Weighted Score': "{:.2f}"}),
+            use_container_width=True
         )
-        
-        # Calculate Final Score: AI Probability + Weighted Manual Sum
-        final_score = row['AI Probability'] + weighted_manual_sum
-        
-        final_scores_list.append({
-            'Material': mat,
-            'AI Probability': f"{row['AI Probability']*100:.1f}%",
-            'Weighted Manual Score': f"{weighted_manual_sum:.1f}",
-            'Final Weighted Score': final_score,
-        })
 
-    df_final = pd.DataFrame(final_scores_list)
-    df_final = df_final.sort_values(by='Final Weighted Score', ascending=False).reset_index(drop=True)
-    
-    top_material = df_final.iloc[0]['Material']
-    
-    st.markdown("### Decision Table")
-    st.dataframe(
-        df_final.style.bar(
-            subset=['Final Weighted Score'], 
-            color=MATERIAL_COLORS['Flexible']
-        ).format({'Final Weighted Score': "{:.2f}"}),
-        use_container_width=True
-    )
+        st.success(f"### Final Recommended Material (Based on Weighted Score): {top_material}")
+        
+        st.markdown("---")
 
-    st.success(f"### Final Recommended Material (Based on Weighted Score): {top_material}")
-    
-    st.markdown("---")
-    
-    # --- 4. Global Dataset Analysis (New Section) ---
+
+# --- SECTION 4: GLOBAL XAI & HISTORICAL DATA ---
+if page_selection == "4. Global XAI & Historical Data":
     if df is not None:
-        st.markdown('<div class="anchor" id="global_xai"></div>', unsafe_allow_html=True)
         st.header("4. Global XAI & Historical Data")
         
         # New: Raw Historical Data
         st.subheader("Raw Historical Dataset")
-        with st.expander("Expand to view and filter the full 400-point historical dataset"):
+        st.info("The complete 400-point dataset used to train the AI model.")
+        with st.expander("Expand to view and filter the full dataset"):
             st.dataframe(df, use_container_width=True)
         
-        st.subheader("Global Data Analysis")
-        st.markdown("Review the overall patterns the AI model was trained on for **Global XAI Context**.")
-        
-        with st.expander("Expand for Global XAI Visualizations"):
+        st.markdown("---")
 
-            # 1. Corrosivity Profile
-            st.markdown("#### Corrosivity Profile: Product and Service Breakdown")
-            fig_breakdown = px.histogram(
-                df, x='Product', color='Service', barmode='group', text_auto=True,
-                color_discrete_map={'Sweet': MATERIAL_COLORS['Carbon Steel'], 'Sour': MATERIAL_COLORS['IFL']},
-                title='Pipeline Count by Product and Corrosivity Service', template='plotly_white'
-            )
-            st.plotly_chart(fig_breakdown, use_container_width=True)
-            
-            # 2. Design Pressure Distribution
-            st.markdown("#### Design Pressure Distribution by Material Type")
-            fig_box = px.box(
-                df, x='Type', y='Design Pressure (barg)', color='Type', color_discrete_map=MATERIAL_COLORS,
-                points="all", title='Distribution of Design Pressure for Each Material', template='plotly_white'
-            )
-            st.plotly_chart(fig_box, use_container_width=True)
+        st.subheader("Global Data Analysis (Global XAI Context)")
+        st.markdown("Review the overall patterns the AI model was trained on.")
+        
+        # 1. Corrosivity Profile
+        st.markdown("#### Corrosivity Profile: Product and Service Breakdown")
+        fig_breakdown = px.histogram(
+            df, x='Product', color='Service', barmode='group', text_auto=True,
+            color_discrete_map={'Sweet': MATERIAL_COLORS['Carbon Steel'], 'Sour': MATERIAL_COLORS['IFL']},
+            title='Pipeline Count by Product and Corrosivity Service', template='plotly_white'
+        )
+        st.plotly_chart(fig_breakdown, use_container_width=True)
+        
+        # 2. Design Pressure Distribution
+        st.markdown("#### Design Pressure Distribution by Material Type")
+        fig_box = px.box(
+            df, x='Type', y='Design Pressure (barg)', color='Type', color_discrete_map=MATERIAL_COLORS,
+            points="all", title='Distribution of Design Pressure for Each Material', template='plotly_white'
+        )
+        st.plotly_chart(fig_box, use_container_width=True)
+        
+    else:
+        st.error("⚠️ Historical dataset could not be loaded. Please check the file path.")
 
 # --- FOOTER ---
 st.markdown("---")
@@ -527,4 +537,3 @@ st.markdown("""
 <p>PMAT v1.0 | UTP & PETRONAS Carigali | © 2025</p>
 </div>
 """, unsafe_allow_html=True)
-
