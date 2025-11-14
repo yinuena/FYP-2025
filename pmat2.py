@@ -10,6 +10,7 @@ from sklearn.preprocessing import LabelEncoder
 import os
 
 # --- FILE PATH CONSTANTS ---
+# NOTE: These files (rf_model4.pkl, le_product.pkl, le_service.pkl) must be present in the same directory for the app to work.
 MODEL_PATH = "rf_model4.pkl"
 DATASET_PATH = "pipeline_dataset4.csv"
 PRODUCT_ENCODER_PATH = "le_product.pkl"
@@ -134,6 +135,7 @@ def make_prediction(model, le_product, le_service, inputs):
         return None
 
     # Prepare features in correct order
+    # NOTE: Ensure this order matches the features used in model training!
     feature_order = ['Length', 'Pressure', 'Temperature', 'Pipeline Size', 'Product_Encoded', 'Service_Encoded']
     features = np.array([
         inputs['length'], 
@@ -167,8 +169,10 @@ def make_prediction(model, le_product, le_service, inputs):
     # Get feature importance
     feature_importance = []
     if hasattr(model, 'feature_importances_'):
+        # Ensure 'Pipeline Size' matches the input name convention
+        ordered_feature_names = ['Length', 'Design Pressure (barg)', 'Design Temperature degC', 'Pipeline Size (inch)', 'Product_Encoded', 'Service_Encoded']
         feature_importance = sorted(
-            zip(feature_order, model.feature_importances_), 
+            zip(ordered_feature_names, model.feature_importances_), 
             key=lambda x: x[1], 
             reverse=True
         )
@@ -180,6 +184,64 @@ def make_prediction(model, le_product, le_service, inputs):
         'feature_importance': feature_importance,
         'probabilities': probabilities_dict
     }
+
+def get_rejection_reasoning(material_type, inputs):
+    """
+    Generates a human-readable reason for why a material might not be the primary choice,
+    based on common pipeline material constraints and user inputs. (Local XAI)
+    """
+    reasons = []
+    
+    # Define simple, illustrative constraint thresholds (can be refined with engineering data)
+    P_HIGH = 110 # barg
+    T_HIGH = 85  # degC
+    SIZE_LARGE = 24 # inch
+    SIZE_SMALL = 8 # inch
+    P_LOW = 40 # barg
+
+    pressure = inputs['pressure']
+    temperature = inputs['temperature']
+    size = inputs['size']
+    service = inputs['service']
+
+    # --- Material-Specific Constraints ---
+
+    if material_type == 'RTP':
+        if pressure > P_HIGH:
+            reasons.append(f"Design Pressure ({pressure:.1f} barg) exceeds the typical limit for RTP (generally below {P_HIGH} barg).")
+        if temperature > T_HIGH:
+            reasons.append(f"Design Temperature ({temperature:.1f}°C) is approaching or exceeds the typical operational limit for thermoplastic materials.")
+        if size > SIZE_SMALL:
+            reasons.append(f"Pipeline Size ({size} inch) is large, and RTP is typically favored for smaller diameter pipes.")
+            
+    elif material_type == 'Carbon Steel':
+        if service == 'Sour':
+            # This reason highlights the need for a protective layer (IFL) or more exotic material.
+            reasons.append(f"Service is 'Sour' (corrosive), which often requires specialized corrosion management (e.g., IFL) or a more resistant alloy.")
+        if pressure < P_LOW and size < SIZE_SMALL:
+            reasons.append(f"The combined low pressure ({pressure:.1f} barg) and small size ({size} inch) mean a more cost-effective material (like RTP or Flexible) might be preferable.")
+            
+    elif material_type == 'IFL':
+        if service == 'Sweet':
+            reasons.append("Service is 'Sweet' (non-corrosive), eliminating the primary need for the internal lining component of IFL.")
+        if pressure < P_LOW:
+             reasons.append(f"Design Pressure ({pressure:.1f} barg) is low; the high cost of IFL is generally reserved for corrosive, high-pressure applications.")
+
+    elif material_type == 'Flexible':
+        if pressure > P_HIGH:
+            reasons.append(f"Design Pressure ({pressure:.1f} barg) exceeds the operational limit for many common flexible pipe designs.")
+        if size > SIZE_LARGE:
+             reasons.append(f"Pipeline Size ({size} inch) is large, making installation and procurement of high-diameter flexible pipe complex and costly.")
+    
+    # If no specific rule triggered, provide a general summary
+    if not reasons:
+        # Use the primary prediction's confidence for context
+        primary_confidence = st.session_state.prediction_result['confidence']
+        reasons.append(f"Prediction probability ({primary_confidence*100:.1f}%) for the primary choice was significantly higher, suggesting a more optimal fit based on the historical feature patterns.")
+
+    # Return as a bulleted list string
+    return "<ul>" + "".join([f"<li>{r}</li>" for r in reasons]) + "</ul>"
+
 
 # --- HEADER ---
 st.markdown("""
@@ -214,7 +276,7 @@ with st.sidebar:
     materials_info = {
         "Carbon Steel": "High pressure, general purpose",
         "Flexible": "Medium sizes, moderate conditions",
-        "IFL": "Corrosive environments",
+        "IFL": "Corrosive environments (Sour service)",
         "RTP": "Small sizes, low pressure"
     }
     for m, desc in materials_info.items():
@@ -245,6 +307,9 @@ with st.form("pipeline_inputs"):
     product_options = df['Product'].unique().tolist() if df is not None and 'Product' in df.columns else ['Gas', 'Oil', 'Condensate', 'Water']
     service_options = df['Service'].unique().tolist() if df is not None and 'Service' in df.columns else ['Sweet', 'Sour']
 
+    # Initialize inputs dictionary to store current inputs for rejection analysis later
+    current_inputs = {}
+
     with col1:
         st.subheader("Physical Parameters")
         pipeline_size = st.number_input("Pipeline Size (inch)", 2, 36, 20, 2)
@@ -259,9 +324,8 @@ with st.form("pipeline_inputs"):
 
     submitted = st.form_submit_button("Generate AI Recommendation", use_container_width=True)
 
-# --- HANDLE SUBMISSION ---
-if submitted:
-    inputs = {
+    # Capture inputs immediately after form submission logic
+    current_inputs = {
         'size': pipeline_size, 
         'length': length, 
         'product': product, 
@@ -269,25 +333,31 @@ if submitted:
         'pressure': pressure, 
         'temperature': temperature
     }
+
+# --- HANDLE SUBMISSION ---
+if submitted:
     
     with st.spinner(" Generating recommendation..."):
         time.sleep(0.5)
-        result = make_prediction(rf_model, le_product, le_service, inputs)
+        result = make_prediction(rf_model, le_product, le_service, current_inputs)
         
         if result:
             st.session_state.prediction_result = result
             st.session_state.prediction_made = True
             st.session_state.prediction_history.append({
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'inputs': inputs,
+                'inputs': current_inputs, # Use the current_inputs dictionary here
                 'result': result['material'],
                 'confidence': result['confidence']
             })
-            st.rerun()
+            # st.rerun() is generally discouraged in favor of simple state updates, 
+            # but if you need a full page refresh, keep it. For this code, a simple success/rerun works.
+            st.rerun() 
 
-# --- DISPLAY RESULTS ---
+# --- DISPLAY RESULTS (Enhanced with Local XAI) ---
 if st.session_state.prediction_made and st.session_state.prediction_result:
     result = st.session_state.prediction_result
+    inputs = st.session_state.prediction_history[-1]['inputs'] # Retrieve inputs from history for reasoning
     st.markdown("---")
     st.header("AI Recommendation Results")
     st.success("✅ Analysis Complete!")
@@ -308,16 +378,31 @@ if st.session_state.prediction_made and st.session_state.prediction_result:
     </div>
     """, unsafe_allow_html=True)
 
-    # Alternatives
+    # Alternatives and Reasoning (Enhanced Section)
     if result['alternatives']:
-        st.subheader("Alternative Materials")
-        alt_cols = st.columns(len(result['alternatives']))
-        for idx, alt in enumerate(result['alternatives']):
-            with alt_cols[idx]:
-                st.metric(
-                    label=alt['material'],
-                    value=f"{alt['score']*100:.1f}%"
-                )
+        st.subheader("Alternatives & Rejection Analysis (Local XAI)")
+        st.markdown("""
+        <div class="warning-box">
+        <strong>🔍 Rejection Analysis:</strong><br>
+        These materials are less likely primarily because their operational or cost profile does not align as optimally with your input parameters as the recommended material.
+        </div>
+        """, unsafe_allow_html=True)
+        
+        alt_data = []
+        for alt in result['alternatives']:
+            # Use the new function to get the engineering reason
+            reasoning = get_rejection_reasoning(alt['material'], inputs) 
+            alt_data.append({
+                'Material': alt['material'],
+                'Score': f"{alt['score']*100:.1f}%",
+                'Reason for Lower Score': reasoning
+            })
+            
+        alt_df = pd.DataFrame(alt_data)
+        
+        # Display the alternative materials in an interactive table
+        st.markdown("### Detailed Alternative Breakdown")
+        st.markdown(alt_df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
     # Probability distribution chart
     st.subheader("Material Probability Distribution")
@@ -363,6 +448,86 @@ if st.session_state.prediction_made and st.session_state.prediction_result:
             height=400
         )
         st.plotly_chart(fig_fi, use_container_width=True)
+
+# --- DATASET VISUALIZATIONS & GLOBAL XAI CONTEXT (New Section) ---
+if df is not None:
+    st.markdown("---")
+    st.header("📊 Dataset Analysis & Global AI Context")
+    
+    st.markdown("""
+    <div class="info-box">
+    <strong>💡 Explainable AI (XAI) Context:</strong><br>
+    The model's predictions are based on patterns observed in this historical dataset. These visualizations provide the <strong>Global Context</strong>, showing the historical relationship between design parameters and material selection. Compare your predicted point against these distributions to understand <strong>why</strong> the model made its choice.
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # 1. Material Selection Envelope (Crucial Global XAI Visualization)
+    st.subheader("1. Material Selection Envelope: Design Pressure vs. Temperature")
+    st.markdown("Shows the typical operating regimes (P/T combinations) for each material type.")
+    
+    fig_envelope = px.scatter(
+        df,
+        x='Design Temperature degC',
+        y='Design Pressure (barg)',
+        color='Type',
+        hover_data=['Product', 'Service', 'Pipeline Size (inch)', 'Length (km)'],
+        title='Historical Design Parameters by Pipeline Material Type',
+        template='plotly_white'
+    )
+    fig_envelope.update_layout(
+        xaxis_title='Design Temperature ($^{\circ}$C)',
+        yaxis_title='Design Pressure (barg)',
+        legend_title='Material Type',
+        height=550
+    )
+    st.plotly_chart(fig_envelope, use_container_width=True)
+    
+    st.markdown("---")
+
+    # 2. Product vs. Service Profile (Categorical Breakdown)
+    st.subheader("2. Corrosivity Profile: Product and Service Breakdown")
+    st.markdown("Analyzes the distribution of products and corrosivity (Sweet/Sour) across the dataset.")
+    
+    fig_breakdown = px.histogram(
+        df,
+        x='Product',
+        color='Service',
+        barmode='group',
+        text_auto=True,
+        title='Pipeline Count by Product and Corrosivity Service',
+        template='plotly_white'
+    )
+    fig_breakdown.update_layout(
+        xaxis_title='Pipeline Product',
+        yaxis_title='Number of Pipelines',
+        legend_title='Service Type',
+        height=450
+    )
+    st.plotly_chart(fig_breakdown, use_container_width=True)
+    
+    st.markdown("---")
+
+    # 3. Design Pressure Distribution by Material (Box Plot)
+    st.subheader("3. Design Pressure Distribution by Material Type")
+    st.markdown("Compares the spread and typical range (median, quartiles) of Design Pressure for each material.")
+    
+    fig_box = px.box(
+        df,
+        x='Type',
+        y='Design Pressure (barg)',
+        color='Type',
+        points="all", # Show individual data points
+        title='Distribution of Design Pressure for Each Material',
+        template='plotly_white'
+    )
+    fig_box.update_layout(
+        xaxis_title='Pipeline Material Type',
+        yaxis_title='Design Pressure (barg)',
+        showlegend=False,
+        height=450
+    )
+    st.plotly_chart(fig_box, use_container_width=True)
+
 
 # --- PREDICTION HISTORY ---
 if st.session_state.prediction_history:
