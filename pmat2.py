@@ -8,12 +8,14 @@ import time
 import joblib
 from sklearn.preprocessing import LabelEncoder
 import os
+import base64
 
 # --- FILE PATH CONSTANTS ---
 MODEL_PATH = "rf_model4.pkl"
 DATASET_PATH = "pipeline_dataset4.csv"
 PRODUCT_ENCODER_PATH = "le_product.pkl"
 SERVICE_ENCODER_PATH = "le_service.pkl"
+LOGO_PATH = "pmat_logo.png" # Make sure your logo is named this and is in the same folder
 
 # --- Material Colors for consistent charting ---
 MATERIAL_COLORS = {
@@ -23,7 +25,7 @@ MATERIAL_COLORS = {
     'RTP': '#f59e0b'           # Amber
 }
 
-# --- PAGE CONFIG (Emoji removed) ---
+# --- PAGE CONFIG ---
 st.set_page_config(
     page_title="PMAT - Pipeline Material Assessment Tool",
     layout="wide",
@@ -34,7 +36,19 @@ st.set_page_config(
 st.markdown("""
 <style>
 /* Header Styling */
-.main-header { background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%); padding: 2rem; border-radius: 10px; color: white; margin-bottom: 2rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);}
+.main-header { 
+    background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%); 
+    padding: 2rem; 
+    border-radius: 10px; 
+    color: white; 
+    margin-bottom: 2rem; 
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    /* For logo and text alignment */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
 .main-header h1 { color: white; margin: 0; font-size: 2.5rem;}
 .main-header p { color: #e0e7ff; margin: 0.3rem 0 0 0; font-size: 0.95rem;}
 /* Button Styling */
@@ -102,7 +116,7 @@ if 'prediction_history' not in st.session_state:
 if 'current_inputs' not in st.session_state:
     st.session_state.current_inputs = {'size': 20, 'length': 48.4, 'product': 'Gas', 'service': 'Sweet', 'pressure': 168.4, 'temperature': 28.2}
 
-# --- HELPER FUNCTIONS (retained as before) ---
+# --- HELPER FUNCTIONS ---
 def make_prediction(model, le_product, le_service, inputs):
     try:
         product_encoded = le_product.transform([inputs['product']])[0]
@@ -177,27 +191,52 @@ def get_rejection_reasoning(material_type, inputs):
         
     return "<ul>" + "".join([f"<li>{r}</li>" for r in reasons]) + "</ul>"
 
+def get_img_as_base64(file):
+    try:
+        with open(file, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except FileNotFoundError:
+        return None
 
-# --- HEADER ---
-st.markdown("""
-<div class="main-header">
-<h1>PMAT | Pipeline Material Assessment Tool</h1>
-<p>AI-Powered Material Selection and Decision Support Dashboard</p>
-</div>
-""", unsafe_allow_html=True)
+# --- HEADER (Updated with Logo) ---
+img_b64 = get_img_as_base64(LOGO_PATH)
+
+if img_b64:
+    header_content = f"""
+    <div style="display: flex; align-items: center; justify-content: center; text-align: center;">
+        <img src="data:image/png;base64,{img_b64}" style="height: 120px; margin-right: 20px;">
+        <div>
+            <h1 style="margin: 0; color: white;">PMAT | Pipeline Material Assessment Tool</h1>
+            <p style="margin: 0.3rem 0 0 0; color: #e0e7ff;">AI-Powered Material Selection and Decision Support Dashboard</p>
+        </div>
+    </div>
+    """
+    st.markdown(f"""
+    <div class="main-header" style="padding: 1rem 2rem;">
+        {header_content}
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    # Fallback to text-only header if the logo file is missing
+    st.markdown("""
+    <div class="main-header">
+        <h1>PMAT | Pipeline Material Assessment Tool</h1>
+        <p>AI-Powered Material Selection and Decision Support Dashboard</p>
+    </div>
+    """, unsafe_allow_html=True)
+
 
 # --- SIDEBAR NAVIGATION (Updated) ---
 PAGES = {
     "1. AI Analysis: Input & Results": "ai_analysis",
     "2. Engineering Decision Matrix": "decision_matrix",
     "3. Global XAI & Historical Data": "global_xai",
-    "4. Prediction History": "history", # New section
+    "4. Prediction History": "history", 
 }
 
 with st.sidebar:
     st.header("Dashboard Navigation")
     
-    # Use session state to potentially store the current selection
     if 'page_selection' not in st.session_state:
         st.session_state.page_selection = list(PAGES.keys())[0]
 
@@ -205,7 +244,7 @@ with st.sidebar:
         "Select Analysis Step:", 
         options=list(PAGES.keys()), 
         index=list(PAGES.keys()).index(st.session_state.page_selection),
-        key='page_selection' # Link selectbox value to session state
+        key='page_selection'
     )
     
     st.markdown("---")
@@ -213,15 +252,15 @@ with st.sidebar:
     if rf_model:
         st.metric("Algorithm", "Random Forest Classifier")
         st.metric("Model Accuracy", "98%")
-        st.success("Model: Active") # Removed emoji
+        st.success("Model: Active")
     else:
-        st.error("Model: Not Loaded") # Removed emoji
+        st.error("Model: Not Loaded")
     
     st.markdown("---")
 
 # --- CHECK IF MODEL IS LOADED ---
 if rf_model is None or le_product is None or le_service is None:
-    st.error("Model or encoders not loaded properly. Please check your files.") # Removed emoji
+    st.error("Model or encoders not loaded properly. Please check your files.")
     st.stop()
 
 
@@ -279,7 +318,6 @@ if page_selection == "1. AI Analysis: Input & Results":
                     'result': result['material'],
                     'confidence': result['confidence']
                 })
-                # Rerun to display results immediately below the form
                 st.rerun() 
     
     # --- DISPLAY RESULTS (Continuation of Section 1) ---
@@ -288,7 +326,7 @@ if page_selection == "1. AI Analysis: Input & Results":
         inputs = st.session_state.current_inputs
         st.markdown("---")
         st.subheader("AI Recommendation & Explainable AI (XAI) Results")
-        st.success("Prediction Analysis Complete.") # Removed emoji
+        st.success("Prediction Analysis Complete.")
 
         # Recommendation card
         color = MATERIAL_COLORS.get(result['material'], '#94a3b8')
@@ -378,7 +416,7 @@ if page_selection == "1. AI Analysis: Input & Results":
 # --- SECTION 2: DECISION MATRIX ---
 if page_selection == "2. Engineering Decision Matrix":
     if not st.session_state.prediction_made:
-        st.warning("Please input parameters and generate a prediction in the '1. AI Analysis: Input & Results' section first.") # Removed emoji
+        st.warning("Please input parameters and generate a prediction in the '1. AI Analysis: Input & Results' section first.")
     else:
         result = st.session_state.prediction_result
         st.header("2. Engineering Decision Support Matrix")
@@ -394,13 +432,13 @@ if page_selection == "2. Engineering Decision Matrix":
             
             # --- User Weights ---
             st.subheader("User Weights: Importance of Non-AI Factors")
-            st.markdown("**Slider Meaning:** 0 = No Importance, 5 = Highest Importance in Final Decision.")
+            st.markdown("**Slider Meaning:** 0 = Factor is irrelevant or not considered. 5 = Factor is critically important in the final decision.")
 
             col_w1, col_w2, col_w3 = st.columns(3)
 
-            weight_cost = col_w1.slider("Relative Cost/CAPEX Importance", 0, 5, 4, help="How much cost should influence the final decision (5=High).")
+            weight_cost = col_w1.slider("Relative Cost/CAPEX Importance", 0, 5, 4, help="How much cost (CAPEX/OPEX) should influence the final decision (5=High).")
             weight_risk = col_w2.slider("Failure/Safety Consequence Importance", 0, 5, 3, help="How much risk/safety consequence should influence the final decision (5=High).")
-            weight_availability = col_w3.slider("Lead Time/Availability Importance", 0, 5, 2, help="How much material availability should influence the final decision (5=High).")
+            weight_availability = col_w3.slider("Lead Time/Availability Importance", 0, 5, 2, help="How much material availability and procurement time should influence the final decision (5=High).")
 
             weights = {
                 'Cost Score': weight_cost,
@@ -408,12 +446,16 @@ if page_selection == "2. Engineering Decision Matrix":
                 'Availability Score': weight_availability
             }
         
-        # --- Scoring Table ---
-        st.subheader("Scoring Table: Manual Engineering Score")
-        st.markdown("**Scoring Guide:**")
-        st.markdown("- **Cost Score:** 5 = Low Cost, 1 = High Cost")
-        st.markdown("- **Risk Score:** 5 = Low Risk, 1 = High Risk")
-        st.markdown("- **Availability Score:** 5 = Fast Lead Time, 1 = Slow Lead Time")
+        # --- Scoring Table (Updated Guide) ---
+        st.subheader("Scoring Table: Manual Engineering Score (1-5)")
+        st.markdown("**Scoring Guide (Your Expert Judgment):**")
+        st.markdown("""
+        <ul style="padding-left: 20px;">
+            <li><strong style="color: #0d9488;">Cost Score:</strong> 5 = Lowest estimated CAPEX/OPEX. 1 = Highest estimated CAPEX/OPEX.</li>
+            <li><strong style="color: #7e22ce;">Risk Score:</strong> 5 = Lowest risk/consequence of failure (Highest Safety). 1 = Highest risk/consequence of failure.</li>
+            <li><strong style="color: #b45309;">Availability Score:</strong> 5 = Fastest lead time and best availability. 1 = Longest lead time and low availability.</li>
+        </ul>
+        """, unsafe_allow_html=True)
 
         score_cols = st.columns(len(df_matrix))
         manual_scores = {}
@@ -423,6 +465,7 @@ if page_selection == "2. Engineering Decision Matrix":
             with score_cols[i]:
                 st.markdown(f"**{mat}** ({row['AI Probability']*100:.1f}%)")
                 
+                # Sliders with clearer labels/help text
                 cost_s = st.slider(f"Cost Score (1-5)", 1, 5, key=f"cost_{mat}", value=3, help="5=Low Cost, 1=High Cost")
                 risk_s = st.slider(f"Risk Score (1-5)", 1, 5, key=f"risk_{mat}", value=4, help="5=Low Risk, 1=High Risk")
                 avail_s = st.slider(f"Availability Score (1-5)", 1, 5, key=f"avail_{mat}", value=5, help="5=Fast Lead Time, 1=Slow Lead Time")
@@ -518,9 +561,9 @@ if page_selection == "3. Global XAI & Historical Data":
         st.plotly_chart(fig_box, use_container_width=True)
         
     else:
-        st.error("Historical dataset could not be loaded. Please check the file path.") # Removed emoji
+        st.error("Historical dataset could not be loaded. Please check the file path.")
 
-# --- SECTION 4: PREDICTION HISTORY (NEW) ---
+# --- SECTION 4: PREDICTION HISTORY ---
 if page_selection == "4. Prediction History":
     st.header("4. Prediction History")
     
