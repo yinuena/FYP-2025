@@ -253,29 +253,8 @@ PAGES = {
 }
 PAGE_KEYS = list(PAGES.keys())
 
-# --- HELPER FUNCTION TO UPDATE STATE ---
-def update_page_state():
-    # If the user clicks a button in the main body (radio), it updates 'main_page_select'
-    if 'main_page_select' in st.session_state:
-        st.session_state.selected_page = st.session_state.main_page_select
-    # If the user uses the sidebar (selectbox), it updates 'sidebar_page_select'
-    if 'sidebar_page_select' in st.session_state:
-        st.session_state.selected_page = st.session_state.sidebar_page_select
-        
-# --- SIDEBAR NAVIGATION (Primary for Desktop) ---
+# --- SIDEBAR (ONLY Model Context) ---
 with st.sidebar:
-    st.header("Dashboard Navigation")
-    
-    # Sidebar navigation: Uses a UNIQUE KEY. The onChange callback ensures the main state is updated.
-    st.selectbox(
-        "Select Analysis Step:", 
-        options=PAGE_KEYS, 
-        index=PAGE_KEYS.index(st.session_state.selected_page),
-        key='sidebar_page_select', # UNIQUE KEY
-        on_change=update_page_state # Callback to synchronize state
-    )
-    
-    st.markdown("---")
     st.header("Model Context")
     if rf_model:
         st.metric("Algorithm", "Random Forest Classifier")
@@ -287,15 +266,14 @@ with st.sidebar:
     st.markdown("---")
 
 
-# --- MAIN BODY NAVIGATION (Mobile/Tablet Workaround) ---
-# This is the top menu for smaller screens. It also uses a UNIQUE KEY.
+# --- MAIN BODY NAVIGATION (Top Menu/Radio Button) ---
+# This is the primary navigation widget.
 st.radio(
     "Select Step:", 
     options=PAGE_KEYS, 
     index=PAGE_KEYS.index(st.session_state.selected_page),
-    key='main_page_select', # UNIQUE KEY
-    horizontal=True,
-    on_change=update_page_state # Callback to synchronize state
+    key='selected_page', # Uses the main session state key
+    horizontal=True
 )
 
 # The logic below uses the synchronized state variable
