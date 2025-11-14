@@ -23,10 +23,9 @@ MATERIAL_COLORS = {
     'RTP': '#f59e0b'           # Amber
 }
 
-# --- PAGE CONFIG ---
+# --- PAGE CONFIG (Emoji removed) ---
 st.set_page_config(
     page_title="PMAT - Pipeline Material Assessment Tool",
-    page_icon="🔧",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -101,11 +100,10 @@ if 'prediction_result' not in st.session_state:
 if 'prediction_history' not in st.session_state:
     st.session_state.prediction_history = []
 if 'current_inputs' not in st.session_state:
-    st.session_state.current_inputs = {}
+    st.session_state.current_inputs = {'size': 20, 'length': 48.4, 'product': 'Gas', 'service': 'Sweet', 'pressure': 168.4, 'temperature': 28.2}
 
-# --- HELPER FUNCTIONS ---
+# --- HELPER FUNCTIONS (retained as before) ---
 def make_prediction(model, le_product, le_service, inputs):
-    # Prediction logic (as before)
     try:
         product_encoded = le_product.transform([inputs['product']])[0]
         service_encoded = le_service.transform([inputs['service']])[0]
@@ -147,7 +145,6 @@ def make_prediction(model, le_product, le_service, inputs):
     }
 
 def get_rejection_reasoning(material_type, inputs):
-    # Rejection reasoning logic (as before)
     reasons = []
     P_HIGH = 110 # barg
     T_HIGH = 85  # degC
@@ -184,56 +181,56 @@ def get_rejection_reasoning(material_type, inputs):
 # --- HEADER ---
 st.markdown("""
 <div class="main-header">
-<h1>🔧 PMAT | Pipeline Material Assessment Tool</h1>
+<h1>PMAT | Pipeline Material Assessment Tool</h1>
 <p>AI-Powered Material Selection and Decision Support Dashboard</p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- SIDEBAR NAVIGATION ---
+# --- SIDEBAR NAVIGATION (Updated) ---
 PAGES = {
-    "1. Pipeline Parameters": "input",
-    "2. AI Recommendation & XAI": "ai_results",
-    "3. Engineering Decision Matrix": "decision_matrix",
-    "4. Global XAI & Historical Data": "global_xai",
+    "1. AI Analysis: Input & Results": "ai_analysis",
+    "2. Engineering Decision Matrix": "decision_matrix",
+    "3. Global XAI & Historical Data": "global_xai",
+    "4. Prediction History": "history", # New section
 }
 
 with st.sidebar:
     st.header("Dashboard Navigation")
     
-    # Use st.selectbox to control content display
+    # Use session state to potentially store the current selection
+    if 'page_selection' not in st.session_state:
+        st.session_state.page_selection = list(PAGES.keys())[0]
+
     page_selection = st.selectbox(
         "Select Analysis Step:", 
         options=list(PAGES.keys()), 
-        format_func=lambda x: x.split(". ")[1] # Display only the title, not the number
+        index=list(PAGES.keys()).index(st.session_state.page_selection),
+        key='page_selection' # Link selectbox value to session state
     )
     
     st.markdown("---")
-    st.header("🎯 Model Context")
+    st.header("Model Context")
     if rf_model:
         st.metric("Algorithm", "Random Forest Classifier")
         st.metric("Model Accuracy", "98%")
-        st.success("🟢 Model: Active")
+        st.success("Model: Active") # Removed emoji
     else:
-        st.error("❌ Model: Not Loaded")
+        st.error("Model: Not Loaded") # Removed emoji
     
     st.markdown("---")
-    if st.session_state.prediction_history:
-        st.header("Prediction History")
-        st.info(f"Total Runs: {len(st.session_state.prediction_history)}")
-        if st.button("Clear History", use_container_width=True):
-            st.session_state.prediction_history = []
-            st.session_state.prediction_made = False
-            st.rerun()
 
 # --- CHECK IF MODEL IS LOADED ---
 if rf_model is None or le_product is None or le_service is None:
-    st.error("⚠️ Model or encoders not loaded properly. Please check your files.")
+    st.error("Model or encoders not loaded properly. Please check your files.") # Removed emoji
     st.stop()
 
 
-# --- SECTION 1: USER INPUT FORM ---
-if page_selection == "1. Pipeline Parameters":
-    st.header("1. Pipeline Parameters Input")
+# --- SECTION 1: AI ANALYSIS (INPUT & RESULTS) ---
+if page_selection == "1. AI Analysis: Input & Results":
+    st.header("1. AI Analysis: Pipeline Parameters Input & Results")
+
+    # --- INPUT FORM ---
+    st.subheader("Pipeline Parameters Input")
     st.markdown("Define the technical specifications for the AI analysis.")
 
     with st.form("pipeline_inputs"):
@@ -244,18 +241,19 @@ if page_selection == "1. Pipeline Parameters":
 
         with col1:
             st.subheader("Physical Parameters")
-            # Use session state to maintain values if user switches pages
-            pipeline_size = st.number_input("Pipeline Size (inch)", 2, 36, st.session_state.current_inputs.get('size', 20), 2)
-            length = st.number_input("Length (km)", 1.0, 75.0, st.session_state.current_inputs.get('length', 48.4), 0.1)
-            product = st.selectbox("Product Type", options=product_options, index=product_options.index(st.session_state.current_inputs.get('product', 'Gas')))
+            pipeline_size = st.number_input("Pipeline Size (inch)", 2, 36, st.session_state.current_inputs['size'], 2)
+            length = st.number_input("Length (km)", 1.0, 75.0, st.session_state.current_inputs['length'], 0.1)
+            product_index = product_options.index(st.session_state.current_inputs['product']) if st.session_state.current_inputs['product'] in product_options else 0
+            product = st.selectbox("Product Type", options=product_options, index=product_index)
 
         with col2:
             st.subheader("Operating Conditions")
-            service = st.selectbox("Service Type", options=service_options, index=service_options.index(st.session_state.current_inputs.get('service', 'Sweet')))
-            pressure = st.number_input("Design Pressure (barg)", 20.0, 180.0, st.session_state.current_inputs.get('pressure', 168.4), 0.1)
-            temperature = st.number_input("Design Temperature (°C)", 25.0, 130.0, st.session_state.current_inputs.get('temperature', 28.2), 0.1)
+            service_index = service_options.index(st.session_state.current_inputs['service']) if st.session_state.current_inputs['service'] in service_options else 0
+            service = st.selectbox("Service Type", options=service_options, index=service_index)
+            pressure = st.number_input("Design Pressure (barg)", 20.0, 180.0, st.session_state.current_inputs['pressure'], 0.1)
+            temperature = st.number_input("Design Temperature (°C)", 25.0, 130.0, st.session_state.current_inputs['temperature'], 0.1)
 
-        submitted = st.form_submit_button("Generate AI Recommendation and Decision Matrix", use_container_width=True)
+        submitted = st.form_submit_button("Generate Prediction & View Results", use_container_width=True)
 
         st.session_state.current_inputs = {
             'size': pipeline_size, 
@@ -281,23 +279,16 @@ if page_selection == "1. Pipeline Parameters":
                     'result': result['material'],
                     'confidence': result['confidence']
                 })
-                # Auto-switch to results page after submission
-                st.session_state['page_selection'] = "2. AI Recommendation & XAI"
-                st.success("✅ Prediction successful! Navigate to 'AI Recommendation & XAI' to view results.")
-                
-                # To trigger the sidebar selectbox change immediately (optional, may not work perfectly without st.rerun)
-                # st.rerun() 
-
-
-# --- SECTION 2: AI RESULTS & XAI ---
-if page_selection == "2. AI Recommendation & XAI":
-    if not st.session_state.prediction_made:
-        st.warning("⚠️ Please input parameters and generate a prediction in the **'1. Pipeline Parameters'** section first.")
-    else:
+                # Rerun to display results immediately below the form
+                st.rerun() 
+    
+    # --- DISPLAY RESULTS (Continuation of Section 1) ---
+    if st.session_state.prediction_made and st.session_state.prediction_result:
         result = st.session_state.prediction_result
         inputs = st.session_state.current_inputs
-        st.header("2. AI Recommendation & Explainable AI (XAI)")
-        st.success("✅ Analysis Loaded. Review the AI's technical recommendation and confidence score.")
+        st.markdown("---")
+        st.subheader("AI Recommendation & Explainable AI (XAI) Results")
+        st.success("Prediction Analysis Complete.") # Removed emoji
 
         # Recommendation card
         color = MATERIAL_COLORS.get(result['material'], '#94a3b8')
@@ -384,13 +375,13 @@ if page_selection == "2. AI Recommendation & XAI":
         st.markdown("---")
 
 
-# --- SECTION 3: DECISION MATRIX ---
-if page_selection == "3. Engineering Decision Matrix":
+# --- SECTION 2: DECISION MATRIX ---
+if page_selection == "2. Engineering Decision Matrix":
     if not st.session_state.prediction_made:
-        st.warning("⚠️ Please input parameters and generate a prediction in the **'1. Pipeline Parameters'** section first.")
+        st.warning("Please input parameters and generate a prediction in the '1. AI Analysis: Input & Results' section first.") # Removed emoji
     else:
         result = st.session_state.prediction_result
-        st.header("3. Engineering Decision Support Matrix")
+        st.header("2. Engineering Decision Support Matrix")
         st.markdown("Use your expert judgment to weigh the AI's prediction against non-technical factors to determine the best material.")
         
         # --- Compile material list for matrix ---
@@ -401,7 +392,7 @@ if page_selection == "3. Engineering Decision Matrix":
         
         with st.container(border=True):
             
-            # --- User Weights (Clearer Labels) ---
+            # --- User Weights ---
             st.subheader("User Weights: Importance of Non-AI Factors")
             st.markdown("**Slider Meaning:** 0 = No Importance, 5 = Highest Importance in Final Decision.")
 
@@ -417,7 +408,7 @@ if page_selection == "3. Engineering Decision Matrix":
                 'Availability Score': weight_availability
             }
         
-        # --- Scoring Table (Clearer Labels) ---
+        # --- Scoring Table ---
         st.subheader("Scoring Table: Manual Engineering Score")
         st.markdown("**Scoring Guide:**")
         st.markdown("- **Cost Score:** 5 = Low Cost, 1 = High Cost")
@@ -432,7 +423,6 @@ if page_selection == "3. Engineering Decision Matrix":
             with score_cols[i]:
                 st.markdown(f"**{mat}** ({row['AI Probability']*100:.1f}%)")
                 
-                # Sliders with clearer labels/help text
                 cost_s = st.slider(f"Cost Score (1-5)", 1, 5, key=f"cost_{mat}", value=3, help="5=Low Cost, 1=High Cost")
                 risk_s = st.slider(f"Risk Score (1-5)", 1, 5, key=f"risk_{mat}", value=4, help="5=Low Risk, 1=High Risk")
                 avail_s = st.slider(f"Availability Score (1-5)", 1, 5, key=f"avail_{mat}", value=5, help="5=Fast Lead Time, 1=Slow Lead Time")
@@ -494,12 +484,12 @@ if page_selection == "3. Engineering Decision Matrix":
         st.markdown("---")
 
 
-# --- SECTION 4: GLOBAL XAI & HISTORICAL DATA ---
-if page_selection == "4. Global XAI & Historical Data":
+# --- SECTION 3: GLOBAL XAI & HISTORICAL DATA ---
+if page_selection == "3. Global XAI & Historical Data":
     if df is not None:
-        st.header("4. Global XAI & Historical Data")
+        st.header("3. Global XAI & Historical Data")
         
-        # New: Raw Historical Data
+        # Raw Historical Data
         st.subheader("Raw Historical Dataset")
         st.info("The complete 400-point dataset used to train the AI model.")
         with st.expander("Expand to view and filter the full dataset"):
@@ -528,12 +518,42 @@ if page_selection == "4. Global XAI & Historical Data":
         st.plotly_chart(fig_box, use_container_width=True)
         
     else:
-        st.error("⚠️ Historical dataset could not be loaded. Please check the file path.")
+        st.error("Historical dataset could not be loaded. Please check the file path.") # Removed emoji
+
+# --- SECTION 4: PREDICTION HISTORY (NEW) ---
+if page_selection == "4. Prediction History":
+    st.header("4. Prediction History")
+    
+    if not st.session_state.prediction_history:
+        st.info("No prediction history available yet. Run a prediction in the first section to start tracking.")
+    else:
+        st.subheader(f"Recent Prediction History ({len(st.session_state.prediction_history)} total runs)")
+        st.info("Showing the last 10 entries for brevity.")
+        
+        history_display = []
+        # Reverse and take the last 10
+        for h in st.session_state.prediction_history[::-1][:10]:
+            inputs_str = f"Size: {h['inputs']['size']} inch, Length: {h['inputs']['length']} km, {h['inputs']['product']}, {h['inputs']['service']}"
+            history_display.append({
+                'Timestamp': h['timestamp'],
+                'Parameters': inputs_str,
+                'Recommended Material': h['result'],
+                'Confidence': f"{h['confidence']*100:.1f}%"
+            })
+        
+        history_df = pd.DataFrame(history_display)
+        st.dataframe(history_df, use_container_width=True, hide_index=True)
+        
+        st.markdown("---")
+        if st.button("Clear All History", use_container_width=True):
+            st.session_state.prediction_history = []
+            st.session_state.prediction_made = False
+            st.rerun()
 
 # --- FOOTER ---
 st.markdown("---")
 st.markdown("""
 <div style="text-align:center;color:#64748b;">
-<p>PMAT v1.0 | UTP & PETRONAS Carigali | © 2025</p>
+<p>PMAT v1.0 | UTP & PETRONAS Carigali | &copy; 2025</p>
 </div>
 """, unsafe_allow_html=True)
