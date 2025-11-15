@@ -10,12 +10,15 @@ from sklearn.preprocessing import LabelEncoder
 import os
 import base64
 
+# Add the FPDF import for PDF generation
+from fpdf import FPDF 
+
 # --- FILE PATH CONSTANTS ---
 MODEL_PATH = "rf_model4.pkl"
 DATASET_PATH = "pipeline_dataset4.csv"
 PRODUCT_ENCODER_PATH = "le_product.pkl"
 SERVICE_ENCODER_PATH = "le_service.pkl"
-LOGO_PATH = "pmat_logo.png" 
+LOGO_PATH = "pmat_logo.png"
 
 # --- Material Colors for consistent charting ---
 MATERIAL_COLORS = {
@@ -177,6 +180,7 @@ def make_prediction(model, le_product, le_service, inputs):
     }
 
 def get_rejection_reasoning(material_type, inputs):
+    # This function is used both for the Streamlit UI (HTML) and the PDF report (plain text/list)
     reasons = []
     P_HIGH = 110 # barg
     T_HIGH = 85  # degC
@@ -189,25 +193,43 @@ def get_rejection_reasoning(material_type, inputs):
     size = inputs['size']
     service = inputs['service']
 
-    if material_type == 'RTP':
-        if pressure > P_HIGH: reasons.append(f"Design Pressure ({pressure:.1f} barg) exceeds the typical limit for **RTP** (generally below {P_HIGH} barg).")
-        if temperature > T_HIGH: reasons.append(f"Design Temperature ({temperature:.1f}°C) is high, approaching the operational limit for thermoplastic materials.")
-        if size > SIZE_SMALL: reasons.append(f"Pipeline Size ({size} inch) is large; **RTP** is typically favored for smaller diameter pipes (<{SIZE_SMALL} inch).")
-    elif material_type == 'Carbon Steel':
-        if service == 'Sour': reasons.append(f"Service is **'Sour'** (corrosive), which often requires specialized corrosion resistant materials or internal lining (like **IFL**).")
-        if pressure < P_LOW and size < SIZE_SMALL: reasons.append(f"The combined low pressure ({pressure:.1f} barg) and small size ({size} inch) mean a more cost-effective material (**RTP** or **Flexible**) might be preferable.")
-    elif material_type == 'IFL':
-        if service == 'Sweet': reasons.append("Service is **'Sweet'** (non-corrosive), eliminating the primary justification for the high cost of the internal lining (IFL).")
-        if pressure < P_LOW: reasons.append(f"Design Pressure ({pressure:.1f} barg) is low; **IFL** is generally reserved for corrosive, high-pressure applications.")
-    elif material_type == 'Flexible':
-        if pressure > P_HIGH: reasons.append(f"Design Pressure ({pressure:.1f} barg) exceeds the operational limit for many common **Flexible** pipe designs.")
-        if size > SIZE_LARGE: reasons.append(f"Pipeline Size ({size} inch) is large, making installation and procurement of high-diameter **Flexible** pipe complex.")
+    # Text formatting for HTML (Streamlit UI)
+    def format_reason(reason):
+        return f"<li>{reason}</li>"
     
-    if not reasons and st.session_state.prediction_made:
+    # Text formatting for PDF (Plain Text)
+    def format_reason_pdf(reason):
+        return f"- {reason}"
+    
+    # Check if we are formatting for PDF (a simple way to differentiate based on caller/context)
+    is_pdf = 'PDF_CONTEXT' in os.environ and os.environ['PDF_CONTEXT'] == 'TRUE'
+    
+    reason_formatter = format_reason_pdf if is_pdf else format_reason
+    
+    if material_type == 'RTP':
+        if pressure > P_HIGH: reasons.append(reason_formatter(f"Design Pressure ({pressure:.1f} barg) exceeds the typical limit for **RTP** (generally below {P_HIGH} barg)."))
+        if temperature > T_HIGH: reasons.append(reason_formatter(f"Design Temperature ({temperature:.1f}°C) is high, approaching the operational limit for thermoplastic materials."))
+        if size > SIZE_SMALL: reasons.append(reason_formatter(f"Pipeline Size ({size} inch) is large; **RTP** is typically favored for smaller diameter pipes (<{SIZE_SMALL} inch)."))
+    elif material_type == 'Carbon Steel':
+        if service == 'Sour': reasons.append(reason_formatter(f"Service is **'Sour'** (corrosive), which often requires specialized corrosion resistant materials or internal lining (like **IFL**)."))
+        if pressure < P_LOW and size < SIZE_SMALL: reasons.append(reason_formatter(f"The combined low pressure ({pressure:.1f} barg) and small size ({size} inch) mean a more cost-effective material (**RTP** or **Flexible**) might be preferable."))
+    elif material_type == 'IFL':
+        if service == 'Sweet': reasons.append(reason_formatter("Service is **'Sweet'** (non-corrosive), eliminating the primary justification for the high cost of the internal lining (IFL)."))
+        if pressure < P_LOW: reasons.append(reason_formatter(f"Design Pressure ({pressure:.1f} barg) is low; **IFL** is generally reserved for corrosive, high-pressure applications."))
+    elif material_type == 'Flexible':
+        if pressure > P_HIGH: reasons.append(reason_formatter(f"Design Pressure ({pressure:.1f} barg) exceeds the operational limit for many common **Flexible** pipe designs."))
+        if size > SIZE_LARGE: reasons.append(reason_formatter(f"Pipeline Size ({size} inch) is large, making installation and procurement of high-diameter **Flexible** pipe complex."))
+    
+    if not reasons and st.session_state.prediction_made and not is_pdf: # Only for UI, not for PDF
         confidence = st.session_state.prediction_result['confidence']
-        reasons.append(f"The AI's confidence ({confidence*100:.1f}%) in the primary recommendation was significantly higher, suggesting a more optimal fit based on the historical feature patterns.")
+        reasons.append(reason_formatter(f"The AI's confidence ({confidence*100:.1f}%) in the primary recommendation was significantly higher, suggesting a more optimal fit based on the historical feature patterns."))
         
-    return "<ul>" + "".join([f"<li>{r}</li>" for r in reasons]) + "</ul>"
+    if is_pdf:
+        # Return plain text list for PDF
+        return "\n".join(reasons)
+    else:
+        # Return HTML list for Streamlit UI
+        return "<ul>" + "".join(reasons) + "</ul>"
 
 def get_img_as_base64(file):
     try:
@@ -216,13 +238,119 @@ def get_img_as_base64(file):
     except FileNotFoundError:
         return None
 
+# --- NEW: PDF GENERATION FUNCTION ---
+def create_prediction_report_pdf(inputs, result):
+    # Temporarily set environment variable for PDF formatting in get_rejection_reasoning
+    os.environ['PDF_CONTEXT'] = 'TRUE' 
+    
+    pdf = FPDF(orientation='P', unit='mm', format='A4')
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    
+    # Title
+    pdf.set_font("Arial", "B", 18)
+    pdf.set_text_color(30, 58, 138) # Dark Blue
+    pdf.cell(0, 10, "PMAT AI Material Assessment Report", 0, 1, 'C')
+    pdf.set_line_width(0.5)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(5)
+
+    # Metadata
+    pdf.set_font("Arial", "", 10)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 5, f"Date Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", 0, 1, 'R')
+    pdf.ln(5)
+    
+    # 1. Inputs
+    pdf.set_font("Arial", "B", 12)
+    pdf.set_text_color(30, 58, 138)
+    pdf.cell(0, 7, "1. Input Parameters", 0, 1, 'L')
+    pdf.set_font("Arial", "", 10)
+    pdf.set_text_color(0, 0, 0)
+    
+    input_data = [
+        ("Pipeline Size (inch):", inputs['size']),
+        ("Length (km):", inputs['length']),
+        ("Design Pressure (barg):", inputs['pressure']),
+        ("Design Temperature (°C):", inputs['temperature']),
+        ("Product Type:", inputs['product']),
+        ("Service Type:", inputs['service']),
+    ]
+    
+    for label, value in input_data:
+        pdf.cell(60, 5, label, 0, 0, 'L')
+        pdf.cell(0, 5, str(value), 0, 1, 'L')
+    pdf.ln(8)
+
+    # 2. Recommendation
+    pdf.set_font("Arial", "B", 14)
+    pdf.set_fill_color(59, 130, 246, 50) # Light Blue
+    pdf.set_text_color(255, 255, 255)
+    
+    # Get the recommended material color
+    rec_color = MATERIAL_COLORS.get(result['material'], '#94a3b8').lstrip('#')
+    r, g, b = tuple(int(rec_color[i:i+2], 16) for i in (0, 2, 4))
+    
+    pdf.set_fill_color(r, g, b)
+    pdf.cell(0, 10, f"2. AI Recommended Material: {result['material']}", 0, 1, 'C', 1)
+    
+    pdf.set_font("Arial", "B", 12)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(0, 7, f"AI Confidence Score: {result['confidence']*100:.1f}%", 0, 1, 'C')
+    pdf.ln(5)
+
+    # 3. Probability Distribution
+    pdf.set_font("Arial", "B", 12)
+    pdf.set_text_color(30, 58, 138)
+    pdf.cell(0, 7, "3. Material Probability Distribution", 0, 1, 'L')
+    pdf.set_font("Arial", "", 10)
+    pdf.set_text_color(0, 0, 0)
+    
+    # Prepare data for a simple table
+    pdf.set_fill_color(240, 240, 240)
+    pdf.cell(60, 7, "Material", 1, 0, 'C', 1)
+    pdf.cell(30, 7, "Probability (%)", 1, 1, 'C', 1)
+
+    sorted_probs = sorted(result['probabilities'].items(), key=lambda x: x[1], reverse=True)
+    for material, prob in sorted_probs:
+        pdf.cell(60, 7, material, 1, 0, 'L')
+        pdf.cell(30, 7, f"{prob*100:.1f}", 1, 1, 'R')
+    pdf.ln(5)
+    
+    # 4. Rejection Analysis
+    pdf.set_font("Arial", "B", 12)
+    pdf.set_text_color(30, 58, 138)
+    pdf.cell(0, 7, "4. Rejection Analysis (Why Alternatives Scored Lower)", 0, 1, 'L')
+    pdf.set_font("Arial", "", 10)
+    pdf.set_text_color(0, 0, 0)
+    
+    for alt in result['alternatives']:
+        material = alt['material']
+        score = alt['score']
+        reasoning_text = get_rejection_reasoning(material, inputs)
+        
+        pdf.set_font("Arial", "B", 11)
+        pdf.cell(0, 6, f"Material: {material} (AI Score: {score*100:.1f}%)", 0, 1, 'L')
+        pdf.set_font("Arial", "", 10)
+        
+        # Output the reasoning text (multicell handles line breaks)
+        pdf.multi_cell(0, 5, reasoning_text)
+        pdf.ln(3)
+
+    # Cleanup environment variable
+    del os.environ['PDF_CONTEXT']
+
+    return pdf.output(dest='S').encode('latin-1')
+# --- END NEW: PDF GENERATION FUNCTION ---
+
+
 # --- HEADER (Updated with Logo) ---
 img_b64 = get_img_as_base64(LOGO_PATH)
 
 if img_b64:
     header_content = f"""
     <div style="display: flex; align-items: center; justify-content: center; text-align: center;">
-        <img src="data:image/png;base64,{img_b64}" style="height: 120px; margin-right: 20px;">
+        <img src="data:image/png;base66,{img_b64}" style="height: 120px; margin-right: 20px;">
         <div>
             <h1 style="margin: 0; color: white;">PMAT | Pipeline Material Assessment Tool</h1>
             <p style="margin: 0.3rem 0 0 0; color: #e0e7ff;">AI-Powered Material Selection and Decision Support Dashboard</p>
@@ -353,13 +481,42 @@ if page_selection == "1. AI Analysis: Input & Results":
         # Recommendation card
         color = MATERIAL_COLORS.get(result['material'], '#94a3b8')
         
-        st.markdown(f"""
-        <div style="background-color:{color}33; padding:2rem; border-radius:12px; border-left: 6px solid {color};">
-        <h2 style="margin:0; color:{color};">Recommended Material: {result['material']}</h2>
-        <p style="font-size:1.2rem; margin:0.5rem 0 0 0;">Confidence (AI Score): <strong>{result['confidence']*100:.1f}%</strong></p>
-        </div>
-        """, unsafe_allow_html=True)
+        col_rec, col_download = st.columns([3, 1])
+
+        with col_rec:
+            st.markdown(f"""
+            <div style="background-color:{color}33; padding:2rem; border-radius:12px; border-left: 6px solid {color};">
+            <h2 style="margin:0; color:{color};">Recommended Material: {result['material']}</h2>
+            <p style="font-size:1.2rem; margin:0.5rem 0 0 0;">Confidence (AI Score): <strong>{result['confidence']*100:.1f}%</strong></p>
+            </div>
+            """, unsafe_allow_html=True)
         
+        # --- PDF DOWNLOAD BUTTON (NEW) ---
+        with col_download:
+            pdf_bytes = create_prediction_report_pdf(inputs, result)
+            b64_pdf = base64.b64encode(pdf_bytes).decode('latin-1')
+            
+            # The download link HTML
+            pdf_download_link = f"""
+            <a href="data:application/pdf;base64,{b64_pdf}" download="PMAT_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf">
+                <button style="
+                    width: 100%; 
+                    background: linear-gradient(90deg, #10b981 0%, #059669 100%); 
+                    color: white; 
+                    font-weight: bold; 
+                    padding: 0.75rem; 
+                    border-radius: 8px; 
+                    border: none; 
+                    font-size: 1.1rem; 
+                    transition: all 0.3s ease; 
+                    margin-top: 2rem;">
+                    ⬇️ Download PDF Report
+                </button>
+            </a>
+            """
+            st.markdown(pdf_download_link, unsafe_allow_html=True)
+        # --- END PDF DOWNLOAD BUTTON ---
+            
         st.markdown("---")
 
         # --- Probability Distribution (Sequential Visual) ---
