@@ -340,7 +340,8 @@ def create_prediction_report_pdf(inputs, result):
     # Cleanup environment variable
     del os.environ['PDF_CONTEXT']
 
-    return pdf.output(dest='S').encode('latin-1')
+    # --- FIX APPLIED HERE: pdf.output(dest='S') already returns bytes, remove .encode() ---
+    return pdf.output(dest='S')
 # --- END PDF GENERATION FUNCTION ---
 
 
