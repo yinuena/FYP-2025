@@ -9,9 +9,7 @@ import joblib
 from sklearn.preprocessing import LabelEncoder
 import os
 import base64
-
-# Add the FPDF import for PDF generation
-from fpdf import FPDF 
+from fpdf import FPDF # Requires pip install fpdf2
 
 # --- FILE PATH CONSTANTS ---
 MODEL_PATH = "rf_model4.pkl"
@@ -201,11 +199,12 @@ def get_rejection_reasoning(material_type, inputs):
     def format_reason_pdf(reason):
         return f"- {reason}"
     
-    # Check if we are formatting for PDF (a simple way to differentiate based on caller/context)
+    # Check if we are formatting for PDF (a simple way to differentiate based on environment variable)
     is_pdf = 'PDF_CONTEXT' in os.environ and os.environ['PDF_CONTEXT'] == 'TRUE'
     
     reason_formatter = format_reason_pdf if is_pdf else format_reason
     
+    # NOTE: HTML bolding is kept in the string for the UI, but FPDF will render it as plain text.
     if material_type == 'RTP':
         if pressure > P_HIGH: reasons.append(reason_formatter(f"Design Pressure ({pressure:.1f} barg) exceeds the typical limit for **RTP** (generally below {P_HIGH} barg)."))
         if temperature > T_HIGH: reasons.append(reason_formatter(f"Design Temperature ({temperature:.1f}°C) is high, approaching the operational limit for thermoplastic materials."))
@@ -284,18 +283,18 @@ def create_prediction_report_pdf(inputs, result):
 
     # 2. Recommendation
     pdf.set_font("Arial", "B", 14)
-    pdf.set_fill_color(59, 130, 246, 50) # Light Blue
-    pdf.set_text_color(255, 255, 255)
     
-    # Get the recommended material color
+    # Get the recommended material color (R, G, B integers)
     rec_color = MATERIAL_COLORS.get(result['material'], '#94a3b8').lstrip('#')
     r, g, b = tuple(int(rec_color[i:i+2], 16) for i in (0, 2, 4))
     
     pdf.set_fill_color(r, g, b)
+    pdf.set_text_color(255, 255, 255) # White text for dark background
+    
     pdf.cell(0, 10, f"2. AI Recommended Material: {result['material']}", 0, 1, 'C', 1)
     
     pdf.set_font("Arial", "B", 12)
-    pdf.set_text_color(0, 0, 0)
+    pdf.set_text_color(0, 0, 0) # Back to black for next line
     pdf.cell(0, 7, f"AI Confidence Score: {result['confidence']*100:.1f}%", 0, 1, 'C')
     pdf.ln(5)
 
@@ -327,6 +326,7 @@ def create_prediction_report_pdf(inputs, result):
     for alt in result['alternatives']:
         material = alt['material']
         score = alt['score']
+        # This will call get_rejection_reasoning in PDF context mode
         reasoning_text = get_rejection_reasoning(material, inputs)
         
         pdf.set_font("Arial", "B", 11)
@@ -341,7 +341,7 @@ def create_prediction_report_pdf(inputs, result):
     del os.environ['PDF_CONTEXT']
 
     return pdf.output(dest='S').encode('latin-1')
-# --- END NEW: PDF GENERATION FUNCTION ---
+# --- END PDF GENERATION FUNCTION ---
 
 
 # --- HEADER (Updated with Logo) ---
