@@ -385,14 +385,33 @@ PAGE_KEYS = list(PAGES.keys())
 # --- SIDEBAR (ONLY Model Context) ---
 with st.sidebar:
     st.header("Model Context")
+    
     if rf_model:
         st.metric("Algorithm", "Random Forest Classifier")
-        st.metric("Model Accuracy", "98%")
+        st.metric("Model Accuracy", "88%")
         st.success("Model: Active")
     else:
         st.error("Model: Not Loaded")
     
     st.markdown("---")
+
+    # Pipe Types / Materials Information
+    st.subheader("Pipeline Materials / Pipe Types")
+
+    pipe_info = {
+        "Carbon Steel (CS)": "Most widely used. Strong, durable, cost-effective; suitable for high-pressure service.",
+        "Infield Line (IFL)": "Short-distance pipelines within a field (well → manifold). Usually carbon steel.",
+        "Reinforced Thermoplastic Pipe (RTP)": "Lightweight, corrosion-proof composite pipe. Fast installation; good for sour service.",
+        "Flexible Pipe": "Multi-layer dynamic pipe for offshore environments; excellent fatigue resistance."
+    }
+
+    for pipe, desc in pipe_info.items():
+        st.markdown(
+            f"**{pipe}**<br>"
+            f"<span style='font-size:13px;color:#888;'>{desc}</span>",
+            unsafe_allow_html=True
+        )
+
 
 
 # --- MAIN BODY NAVIGATION (Top Menu/Radio Button) ---
@@ -780,3 +799,4 @@ st.markdown("""
 <p>PMAT v1.0 | UTP & PETRONAS Carigali | &copy; 2025</p>
 </div>
 """, unsafe_allow_html=True)
+
