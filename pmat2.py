@@ -9,14 +9,18 @@ import joblib
 from sklearn.preprocessing import LabelEncoder
 import os
 import base64
+from pathlib import Path
 from fpdf import FPDF # Requires pip install fpdf2
 
+# 1. Get the directory of the current Python script
+SCRIPT_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 # --- FILE PATH CONSTANTS ---
 MODEL_PATH = "rf_model4.pkl"
 DATASET_PATH = "pipeline_dataset4.csv"
 PRODUCT_ENCODER_PATH = "le_product.pkl"
 SERVICE_ENCODER_PATH = "le_service.pkl"
-LOGO_PATH = "pmat_logo.png"
+# 2. Construct the absolute path to the logo file
+LOGO_PATH = SCRIPT_DIR / "pmat_logo.png"
 
 # --- Material Colors for consistent charting ---
 MATERIAL_COLORS = {
@@ -346,18 +350,24 @@ def create_prediction_report_pdf(inputs, result):
 
 
 # --- HEADER (Updated with Logo) ---
-img_b64 = get_img_as_base64(LOGO_PATH)
+if not LOGO_PATH.exists():
+    print(f"--- ERROR ---")
+    print(f"Logo file NOT found at: {LOGO_PATH}")
+else:
+    print(f"Success: Logo file found at: {LOGO_PATH}")
+    img_b64 = get_img_as_base64(str(LOGO_PATH))
 
 if img_b64:
     header_content = f"""
     <div style="display: flex; align-items: center; justify-content: center; text-align: center;">
-        <img src="data:image/png;base66,{img_b64}" style="height: 120px; margin-right: 20px;">
+        <img src="data:image/png;base64,{img_b64}" style="height: 120px; margin-right: 20px;">
         <div>
             <h1 style="margin: 0; color: white;">PMAT | Pipeline Material Assessment Tool</h1>
             <p style="margin: 0.3rem 0 0 0; color: #e0e7ff;">AI-Powered Material Selection and Decision Support Dashboard</p>
         </div>
     </div>
     """
+    
     st.markdown(f"""
     <div class="main-header" style="padding: 1rem 2rem;">
         {header_content}
@@ -799,4 +809,5 @@ st.markdown("""
 <p>PMAT v1.0 | UTP & PETRONAS Carigali | &copy; 2025</p>
 </div>
 """, unsafe_allow_html=True)
+
 
